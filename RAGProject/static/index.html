@@ -226,6 +226,17 @@
       font-size: 14px;
       overflow-wrap: anywhere;
     }
+    .delete-button {
+      padding: 7px 14px;
+      border: 1px solid #fecaca;
+      border-radius: 7px;
+      background: #fff;
+      color: #dc2626;
+      }
+
+    .delete-button:hover {
+      background: #fef2f2;
+    }
 
     .badge {
       display: inline-block;
@@ -339,6 +350,9 @@
         align-items: flex-start;
         flex-direction: column;
       }
+
+
+
     }
   </style>
 </head>
@@ -412,6 +426,7 @@
                   <th scope="col">文件名称</th>
                   <th scope="col">文件大小</th>
                   <th scope="col">入库状态</th>
+                  <th scope="col">操作</th>
                 </tr>
               </thead>
               <tbody id="documentRows"></tbody>
@@ -606,7 +621,21 @@
           }
 
           statusCell.appendChild(badge);
-          row.append(nameCell, sizeCell, statusCell);
+
+          const actionCell = document.createElement("td");
+          const deleteButton = document.createElement("button");
+
+          deleteButton.type = "button";
+          deleteButton.className = "delete-button";
+          deleteButton.textContent = "删除";
+
+          deleteButton.addEventListener("click", () => {
+            deletePDF(doc.id, doc.name, deleteButton);
+          });
+
+          actionCell.appendChild(deleteButton);
+
+          row.append(nameCell, sizeCell, statusCell, actionCell);
           documentRows.appendChild(row);
         }
       } catch (error) {
@@ -615,6 +644,31 @@
       } finally {
         documentsLoading = false;
         refreshButton.disabled = false;
+      }
+    }
+
+
+    async function deletePDF(id, name, button) {
+      const confirmed = window.confirm(
+        `确定删除“${name}”吗？\n将同时删除 PDF 文件及其知识库数据。`
+      );
+
+      if (!confirmed) return;
+
+      button.disabled = true;
+      button.textContent = "删除中……";
+
+      try {
+        await requestJSON(
+          `/api/documents/${encodeURIComponent(id)}`,
+          { method: "DELETE" }
+        );
+      } catch (error) {
+        window.alert(`删除失败：${error.message}`);
+      } finally {
+        button.disabled = false;
+        button.textContent = "删除";
+        await loadDocuments();
       }
     }
 

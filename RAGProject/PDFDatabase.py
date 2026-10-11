@@ -325,6 +325,72 @@ def ingest_pdf(file_path: str):
 
         raise e
 
+def delete_pdf(pdf_id: int, vectorstore) -> dict:
+    """删除指定 PDF 的向量片段、实体文件和数据库记录。"""
+
+    with SessionLocal() as session:
+        pdf = session.get(PDFDocument, pdf_id)
+
+        if pdf is None:
+            raise LookupError("文档不存在")
+
+        filename = pdf.original_name
+        stored_path = pdf.file_path
+
+        # 只允许删除 PDF 保存目录内的文件
+        file_path = Path(stored_path).resolve()
+        pdf_root = PDF_DIR.resolve()
+
+        if not file_path.is_relative_to(pdf_root):
+            raise ValueError("文件路径不在 PDF 保存目录内")
+
+        # 必须与入库时 metadata["source"] 的值一致
+        source_filter = {"source": stored_path}
+
+        result = vectorstore.get(
+            where=source_filter,
+            include=["metadatas"],
+        )
+        chunk_ids = result["ids"]
+
+        # 已入库却匹配不到片段，先停止，避免误报删除成功。
+        # “删除中”允许上一次部分完成后再次重试。
+        if not chunk_ids and pdf.ingest_status == "已入库":
+            raise ValueError(
+                "没有匹配到向量片段，请检查 metadata 中的 "
+                "source 是否与数据库 file_path 一致"
+            )
+
+        # 在跨存储删除前保留可重试的状态
+        pdf.ingest_status = "删除中"
+        session.commit()
+
+        # 1. 删除这份 PDF 的全部向量片段
+        if chunk_ids:
+            vectorstore.delete(ids=chunk_ids)
+
+        # 验证删除结果，失败时保留数据库记录
+        remaining = vectorstore.get(
+            where=source_filter,
+            include=["metadatas"],
+        )
+        if remaining["ids"]:
+            raise RuntimeError("仍有向量片段未删除，请重试")
+
+        # 2. 删除正式保存的 PDF；已不存在则跳过
+        file_path.unlink(missing_ok=True)
+
+        # 3. 最后删除 SQLite 记录
+        session.delete(pdf)
+        session.commit()
+
+        return {
+            "message": "删除成功",
+            "id": pdf_id,
+            "filename": filename,
+            "deleted_chunks": len(chunk_ids),
+        }
+
 if __name__ == "__main__":
     init_database()
 

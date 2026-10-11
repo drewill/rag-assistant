@@ -8,6 +8,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from Agent import ask_retrieval_agent, refresh_retrieval
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMP_DIR = BASE_DIR / "data" / "upload_temp"
@@ -16,8 +17,58 @@ logger = logging.getLogger(__name__)
 
 # 本地学习版：串行执行入库和问答，避免同时操作
 operation_lock = Lock()
+"""
+用户上传 PDF
+      ↓
+main.py
+      ↓
+临时保存
+      ↓
+检查是不是PDF
+      ↓
+ingest_pdf()
+      ↓
+save_pdf()
+      │
+      ├─ 计算hash
+      ├─ 查重
+      ├─ shutil.copy2()
+      ├─ 正式保存到 data/pdfs
+      └─ SQLite写记录
+      ↓
+状态："处理中"
+      ↓
+build_RAG(stored_path)
+      │
+      ├─ PDF读取
+      ├─ 文本切块
+      ├─ Embedding
+      └─ Chroma入库
+      ↓
+成功
+      ↓
+状态："已入库"
+"""
 
 
+"""
+init_database()
+    ↓
+导入 Agent
+    ↓
+保存 ask_agent
+    ↓
+yield
+════════════════════
+服务器一直运行
+════════════════════
+    ↓
+Ctrl+C
+    ↓
+yield后面的代码
+    ↓
+程序结束
+"""
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -29,9 +80,11 @@ async def lifespan(app: FastAPI):
     # 启动时导入，加载一次模型和向量库
     from Agent import ask_agent
 
+    #app.state.ask_agent = ask_agent
     app.state.ask_agent = ask_agent
 
     yield
+    print("网站结束访问。")
 
 
 app = FastAPI(
@@ -139,7 +192,44 @@ def upload_pdf(file: UploadFile = File(...)):
     finally:
         file.file.close()
 
+@app.delete("/api/documents/{pdf_id}")
+def delete_document(pdf_id: int):
+    from PDFDatabase import delete_pdf
+    from utils import load_vectorstore
 
+    try:
+        with operation_lock:
+            vectorstore = load_vectorstore()
+
+            result = delete_pdf(
+                pdf_id=pdf_id,
+                vectorstore=vectorstore,
+            )
+
+            # 在这里接入你的 BM25 / 检索图刷新函数。
+            # 上传、删除后都应该刷新。
+            # refresh_retrieval()
+            refresh_retrieval()
+        return result
+
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        logger.exception("删除 PDF 失败")
+        raise HTTPException(
+            status_code=500,
+            detail="删除未完成，请查看终端日志后重试",
+        ) from exc
 @app.post("/api/chat")
 def chat(body: ChatRequest):
     """将网页问题交给 Agent。"""
