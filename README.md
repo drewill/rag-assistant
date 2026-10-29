@@ -268,9 +268,9 @@ Vector 为纯向量检索基线；RRF 为 BM25 与向量检索的排名融合方
 
 | 文件 | 内容 |
 |---|---|
-| [vector_results.jsonl](RAGProject/benchmarks/vector_results.jsonl) | 纯向量开发集20题结果 |
-| [rrf_results.jsonl](RAGProject/benchmarks/rrf_results.jsonl) | RRF开发集20题结果 |
-| [rrf_test_results.jsonl](RAGProject/benchmarks/rrf_test_results.jsonl) | RRF测试集20题结果 |
+| [vector_results.jsonl](AssistantAgentProject/benchmarks/vector_results.jsonl) | 纯向量开发集20题结果 |
+| [rrf_results.jsonl](AssistantAgentProject/benchmarks/rrf_results.jsonl) | RRF开发集20题结果 |
+| [rrf_test_results.jsonl](AssistantAgentProject/benchmarks/rrf_test_results.jsonl) | RRF测试集20题结果 |
 
 开发集与测试集问答文件位于 `RAGProject/`；测试 PDF 语料位于 `RAGProject/val_data/`。
 

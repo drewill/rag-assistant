@@ -398,6 +398,6 @@ if __name__ == "__main__":
 
 
     ingest_pdf(r"C:\Users\qxx\Desktop\sample_report.pdf")
-    ingest_pdf(r"/RAGProject/咖啡烘焙与风味基础.pdf")
-    ingest_pdf(r"/RAGProject/城市公园生态观察记录.pdf")
+    ingest_pdf(r"/AssistantAgentProject/咖啡烘焙与风味基础.pdf")
+    ingest_pdf(r"/AssistantAgentProject/城市公园生态观察记录.pdf")
     print(get_pdf_by_id(1).ingest_status)

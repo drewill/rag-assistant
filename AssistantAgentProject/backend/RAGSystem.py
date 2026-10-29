@@ -18,7 +18,7 @@ from pathlib import Path
 from langgraph.graph import StateGraph, START, END
 
 from config import dir_chroma, embed_model_ch, embed_collection_name
-#from RAGProject.graph_state import IngestionState
+#from AssistantAgentProject.graph_state import IngestionState
 
 
 

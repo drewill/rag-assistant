@@ -18,7 +18,7 @@ __pycache__/
 chroma_store/
 */chroma_store/
 
-RAGProject/test.pdf
+AssistantAgentProject/test.pdf
 
 *.db
 
@@ -27,6 +27,6 @@ RAGProject/test.pdf
 *.db-*
 *.sqlite3
 *.sqlite3-*
-RAGProject/chroma_store/
+AssistantAgentProject/chroma_store/
 
 test.py
