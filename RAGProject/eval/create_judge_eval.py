@@ -7,7 +7,7 @@ from langchain_openai import ChatOpenAI
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 from ragas.llms import llm_factory
-from ragas.metrics.collections import AnswerRelevancy, Faithfulness
+from ragas.metrics.collections import AnswerRelevancy, Faithfulness, ContextPrecision, ContextRecall
 
 from config import key, url, embed_collection_name
 
@@ -16,15 +16,29 @@ from ragas.embeddings.huggingface_provider import (
 )
 
 # 这些环境变量名是本示例自定义的
-judge_llm = ChatOpenAI(
-    model='deepseek-flash',
+# judge_llm = ChatOpenAI(
+#     model='deepseek-flash',
+#     api_key=key,
+#     base_url=url,
+#     extra_body={
+#         "thinking": {"type": "disabled"}
+#     },
+# )
+
+
+model_client = AsyncOpenAI(
     api_key=key,
     base_url=url,
+)
+
+judge_llm = llm_factory(
+    "deepseek-flash",
+    client=model_client,
+    max_tokens = 4096,
     extra_body={
         "thinking": {"type": "disabled"}
     },
 )
-
 
 class Grade(BaseModel):
     reason: str = Field(description="简要说明评分依据")
@@ -36,11 +50,14 @@ class Grade(BaseModel):
     )
 
 
-judge = judge_llm.with_structured_output(
-    Grade,
-    method="function_calling",
-)
-
+# judge = judge_llm.with_structured_output(
+#     Grade,
+#     method="function_calling",
+# )
+embeddings = RagasHuggingFaceEmbeddings(
+        model=r"C:\huggingface_model\embeddingModel\sentence-transformers\all-MiniLM-L6-v2",
+        device="cpu",
+    )
 
 def relevance(inputs: dict, outputs: dict) -> dict:
     grade = judge.invoke([
@@ -83,35 +100,33 @@ def relevance(inputs: dict, outputs: dict) -> dict:
         "score": grade.score,
         "comment": grade.reason,
     }
-def tmp():
-    embeddings = RagasHuggingFaceEmbeddings(
-        model=r"C:\huggingface_model\embeddingModel\sentence-transformers\all-MiniLM-L6-v2",
-        device="cpu",
+
+
+def get_faithfulness():
+    faithfulness_metric = Faithfulness(
+        llm=judge_llm,
     )
+    return faithfulness_metric
 
-    # Ragas 内部需要异步客户端
-    model_client = AsyncOpenAI(
-        api_key=key,
-        base_url=url,
-    )
-
-
-    judge_llm = llm_factory(
-        "deepseek-flash",
-        client=model_client,
-        extra_body={
-            "thinking": {"type": "disabled"}
-        },
-    )
-
+def get_answerrelevancy():
     relevancy_metric = AnswerRelevancy(
         llm=judge_llm,
         embeddings=embeddings,
     )
-    faithfulness_metric = Faithfulness(
+    return relevancy_metric
+
+
+def get_precision():
+    precision_eval = ContextPrecision(
         llm=judge_llm,
     )
-    return relevancy_metric,faithfulness_metric
+    return precision_eval
+
+def get_recall():
+    recall_eval = ContextRecall(
+        llm=judge_llm,
+    )
+    return recall_eval
 
 def valid_score(value):
     """检查评分是否有效。"""
@@ -121,22 +136,10 @@ def valid_score(value):
         raise ValueError("Ragas 返回了无效分数，请检查评估日志")
 
     return score
-def relevance2(inputs: dict,outputs: dict) -> dict:
-    question = inputs["question"]
-    answer = outputs["answer"]
-    contexts = outputs["contexts"]
-    relevancy_metric,faithfulness_metric = tmp()
-    results = relevancy_metric.score(
-        user_input=question,
-        response=answer,
-    )
-    return {
-        'key': "answerrelevancce",
-        'score': valid_score(results.value),
-    }
 
+# “最终回答中的事实，有多少得到检索文本片段的支持”
 def faithfulness_eval(inputs, outputs):
-    relevancy_metric,faithfulness_metric = tmp()
+    faithfulness_metric = get_faithfulness()
     result = faithfulness_metric.score(
         user_input=inputs["question"],       # 问题：字符串
         response=outputs["answer"],         # 回答：字符串
@@ -146,6 +149,43 @@ def faithfulness_eval(inputs, outputs):
     return {
         "key": "ragas_faithfulness",
         "score": valid_score(result.value),
+    }
+
+def answerrelevance_eval(inputs, outputs):
+    answerrelevance_metric = get_answerrelevancy()
+    results = answerrelevance_metric.score(
+        user_input = inputs["question"],
+        response = outputs["answer"],
+    )
+    return {
+        "key": "answerrelevance",
+        "score": valid_score(results.value),
+    }
+
+# 检索出来的片段是否有用，以及有用的片段是否排在前面。
+def precision_eval(inputs, outputs,reference_outputs):
+    precision_metric = get_precision()
+    results = precision_metric.score(
+        user_input=inputs["question"],
+        retrieved_contexts=outputs["contexts"],
+        reference = reference_outputs["answer"],
+
+    )
+    return {
+        "key": "precision_eval",
+        "score": valid_score(results.value),
+    }
+
+def recall_eval(inputs, outputs,reference_outputs):
+    recall_metric = get_recall()
+    results = recall_metric.score(
+        user_input=inputs["question"],
+        retrieved_contexts = outputs["contexts"],
+        reference = reference_outputs["answer"],
+    )
+    return {
+        "key": "recall_eval",
+        "score": valid_score(results.value)
     }
 
 

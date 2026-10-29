@@ -32,6 +32,28 @@ def insert_vectorstore(chunks:documents):
 
     vectorstore.add_documents(documents=chunks, ids=ids)
 
+import re
+import jieba
+
+
+def bm25_tokenize(text: str) -> list[str]:
+    parts = re.findall(
+        r"[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*|[\u4e00-\u9fff]+",
+        text,
+    )
+
+    tokens = []
+
+    for part in parts:
+        if re.fullmatch(r"[\u4e00-\u9fff]+", part):
+            tokens.extend(
+                word for word in jieba.lcut(part)
+                if word.strip()
+            )
+        else:
+            tokens.append(part.lower())
+
+    return tokens
 _BM25_CACHE: dict[tuple[int, int], object] = {}
 def _get_or_build_bm25(documents: list[Document], k: int = bm25_key):
     """
@@ -45,7 +67,7 @@ def _get_or_build_bm25(documents: list[Document], k: int = bm25_key):
     cache_key = (id(documents), len(documents))
     bm25 = _BM25_CACHE.get(cache_key)
     if bm25 is None:
-        bm25 = BM25Retriever.from_documents(documents, k=k)
+        bm25 = BM25Retriever.from_documents(documents,preprocess_func=bm25_tokenize, k=k)
         _BM25_CACHE[cache_key] = bm25
     else:
         # 命中缓存时同步 k 值（k 是检索时参数，不影响索引）

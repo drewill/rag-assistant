@@ -131,7 +131,7 @@ def embed_and_store(chunks: list[Document],
 
 def main():
 
-    build_RAG("./RAG知识测试语料.pdf")
+    build_RAG("val_data/RAG知识测试语料.pdf")
     #vectorstore = build_RAG()
 
     # if vectorstore is None:

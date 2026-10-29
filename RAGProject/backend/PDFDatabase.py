@@ -6,9 +6,9 @@ from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, sessionmaker
 import hashlib
 import shutil
 import uuid
-from RAGSystem import build_RAG
+from backend.RAGSystem import build_RAG
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 print(type(BASE_DIR))
 DB_PATH = BASE_DIR / "pdf_store.db"
 
@@ -305,6 +305,7 @@ def ingest_pdf(file_path: str):
     try:
         vectorstore = build_RAG(stored_path)
 
+
         update_pdf_status(
             pdf_id,
             "已入库"
@@ -397,6 +398,6 @@ if __name__ == "__main__":
 
 
     ingest_pdf(r"C:\Users\qxx\Desktop\sample_report.pdf")
-    ingest_pdf(r"C:\Users\qxx\Desktop\MyProject\RAGProject\咖啡烘焙与风味基础.pdf")
-    ingest_pdf(r"C:\Users\qxx\Desktop\MyProject\RAGProject\城市公园生态观察记录.pdf")
+    ingest_pdf(r"/RAGProject/咖啡烘焙与风味基础.pdf")
+    ingest_pdf(r"/RAGProject/城市公园生态观察记录.pdf")
     print(get_pdf_by_id(1).ingest_status)

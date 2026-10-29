@@ -4,7 +4,7 @@ from langchain_chroma import Chroma
 
 from langchain_huggingface import HuggingFaceEmbeddings
 
-from config import RERANKER_MODEL
+from config import RERANKER_MODEL, RERANK_TOP_N
 from config import dir_chroma, embed_model_ch, embed_collection_name
 
 
@@ -81,7 +81,7 @@ def create_sample_documents():
                    "- Multi-modal RAG handling tables, images, and structured data\n"
                    "- Query rewriting and expansion techniques"
                    )
-    pdf_path = "./sample_report.pdf"
+    pdf_path = "val_data/sample_report.pdf"
 
     pdf.output(pdf_path)
     return pdf_path
@@ -144,7 +144,7 @@ def get_reranker(model_name:str = RERANKER_MODEL):
     from langchain_community.cross_encoders import HuggingFaceCrossEncoder
     from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
     cross_encoder = HuggingFaceCrossEncoder(model_name=model_name)
-    return CrossEncoderReranker(model=cross_encoder)
+    return CrossEncoderReranker(model=cross_encoder,top_n = RERANK_TOP_N)
 
 def format_sources(documents) -> list[dict]:
     """

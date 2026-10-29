@@ -8,7 +8,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from Agent import ask_retrieval_agent, refresh_retrieval
+from backend.Agent import refresh_retrieval
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMP_DIR = BASE_DIR / "data" / "upload_temp"
@@ -73,12 +73,12 @@ yield后面的代码
 async def lifespan(app: FastAPI):
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
-    from PDFDatabase import init_database
+    from backend.PDFDatabase import init_database
 
     init_database()
 
     # 启动时导入，加载一次模型和向量库
-    from Agent import ask_agent
+    from backend.Agent import ask_agent
 
     #app.state.ask_agent = ask_agent
     app.state.ask_agent = ask_agent
@@ -101,7 +101,7 @@ class ChatRequest(BaseModel):
 def homepage():
     """返回前端页面。"""
     return FileResponse(
-        BASE_DIR / "static" / "index.html",
+        BASE_DIR / "static" / "index1.html",
         media_type="text/html",
     )
 
@@ -109,7 +109,7 @@ def homepage():
 @app.get("/api/documents")
 def list_documents():
     """读取 PDF 数据库，返回文档列表。"""
-    from PDFDatabase import get_all_pdfs
+    from backend.PDFDatabase import get_all_pdfs
 
     pdfs = get_all_pdfs()
 
@@ -127,7 +127,7 @@ def list_documents():
 @app.post("/api/upload")
 def upload_pdf(file: UploadFile = File(...)):
     """接收 PDF，保存后调用现有入库函数。"""
-    from PDFDatabase import ingest_pdf
+    from backend.PDFDatabase import ingest_pdf
 
     try:
         # 去除上传文件名中可能存在的目录部分
@@ -194,7 +194,7 @@ def upload_pdf(file: UploadFile = File(...)):
 
 @app.delete("/api/documents/{pdf_id}")
 def delete_document(pdf_id: int):
-    from PDFDatabase import delete_pdf
+    from backend.PDFDatabase import delete_pdf
     from utils import load_vectorstore
 
     try:

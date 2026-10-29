@@ -38,8 +38,8 @@ class RetrievalState(TypedDict):
     """
     original_query: str
     rewritten_queries: list[str]
-    vector_results: Annotated[list[Document], operator.add]
-    bm25_results: Annotated[list[Document], operator.add]
+    vector_results: Annotated[list[list[Document]], operator.add]
+    bm25_results: Annotated[list[list[Document]], operator.add]
     merged_results: list[Document]
     reranked_results: list[Document]
     relevance_score: float

@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF 知识库</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", sans-serif;
+      color: #243047;
+      background: #f5f7fb;
+    }
+
+    button, input, textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    textarea:focus-visible {
+      outline: 3px solid #93b4ff;
+      outline-offset: 3px;
+    }
+
+    /* 左侧导航 */
+    .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: 230px;
+      padding: 32px 18px;
+      background: #fff;
+      border-right: 1px solid #e5e9f1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand {
+      margin: 0 12px 6px;
+      font-size: 23px;
+      font-weight: bold;
+    }
+
+    .brand-description {
+      margin: 0 12px 36px;
+      color: #8791a3;
+      font-size: 13px;
+    }
+
+    .navigation {
+      display: grid;
+      gap: 10px;
+    }
+
+    .nav-button {
+      width: 100%;
+      padding: 14px 16px;
+      border: none;
+      border-radius: 10px;
+      background: transparent;
+      color: #627087;
+      text-align: left;
+    }
+
+    .nav-button:hover {
+      background: #f4f7fc;
+    }
+
+    .nav-button.active {
+      background: #eaf1ff;
+      color: #2563eb;
+      font-weight: bold;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 20px 12px 0;
+      font-size: 12px;
+      color: #8791a3;
+    }
+
+    /* 右侧内容 */
+    .main {
+      margin-left: 230px;
+      padding: 44px;
+    }
+
+    .content {
+      max-width: 1050px;
+      margin: auto;
+    }
+
+    .page-header {
+      margin-bottom: 28px;
+    }
+
+    .page-header h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+    }
+
+    .page-header p {
+      margin: 0;
+      color: #7a8699;
+      line-height: 1.7;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .card {
+      padding: 28px;
+      background: #fff;
+      border: 1px solid #e5e9f1;
+      border-radius: 16px;
+    }
+
+    .primary-button,
+    .secondary-button {
+      padding: 11px 20px;
+      border-radius: 8px;
+    }
+
+    .primary-button {
+      border: none;
+      background: #2563eb;
+      color: #fff;
+    }
+
+    .primary-button:hover {
+      background: #1d4ed8;
+    }
+
+    .secondary-button {
+      border: 1px solid #dbe2ed;
+      background: #fff;
+      color: #526078;
+    }
+
+    /* 上传 */
+    .upload-area {
+      padding: 46px 24px;
+      border: 2px dashed #dbe3f1;
+      border-radius: 12px;
+      text-align: center;
+      background: #fafcff;
+    }
+
+    .upload-area h2 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+
+    .upload-area p {
+      margin-bottom: 24px;
+      color: #7a8699;
+    }
+
+    .upload-area input {
+      max-width: 100%;
+    }
+
+    .upload-actions {
+      margin-top: 22px;
+    }
+
+    .status {
+      margin: 18px 0 0;
+      color: #627087;
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+    }
+
+    /* 文档列表 */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .toolbar h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .table-container {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 16px;
+      border-bottom: 1px solid #edf0f5;
+    }
+
+    th {
+      background: #f8faff;
+      color: #78859a;
+      font-size: 14px;
+      font-weight: normal;
+    }
+
+    td {
+      font-size: 14px;
+      overflow-wrap: anywhere;
+    }
+    .delete-button {
+      padding: 7px 14px;
+      border: 1px solid #fecaca;
+      border-radius: 7px;
+      background: #fff;
+      color: #dc2626;
+      }
+
+    .delete-button:hover {
+      background: #fef2f2;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 6px;
+      background: #f0f3f8;
+      color: #627087;
+      white-space: nowrap;
+    }
+
+    .badge.success {
+      background: #eaf8f0;
+      color: #21845a;
+    }
+
+    .badge.failed {
+      background: #fff0f0;
+      color: #bf4545;
+    }
+
+    .empty {
+      padding: 32px;
+      text-align: center;
+      color: #8791a3;
+    }
+
+    /* 聊天：历史消息在上，输入框在下 */
+    .chat-card { padding: 0; overflow: hidden; display: flex;
+      flex-direction: column; height: 72vh; height: 72dvh; min-height: 420px; }
+    .chat-history { flex: 1; min-height: 0; overflow-y: auto;
+      padding: 24px; scroll-behavior: smooth; }
+    .chat-empty { color: #8791a3; text-align: center; padding: 48px 12px; }
+    .message { display: flex; flex-direction: column; align-items: flex-start;
+      margin: 0 0 24px; }
+    .message.user { align-items: flex-end; }
+    .message-label { font-size: 12px; color: #7a8699; margin-bottom: 7px; }
+    .message-body { max-width: 92%; padding: 14px 18px; border-radius: 14px;
+      background: #f3f6fb; line-height: 1.85; white-space: pre-wrap;
+      overflow-wrap: anywhere; }
+    .message.user .message-body { background: #eaf1ff; color: #214e9b; }
+    .message.pending .message-body { color: #7a8699; }
+    .message.error .message-body { background: #fff0f0; color: #b42318; }
+    .chat-composer { padding: 18px 24px; background: #fff;
+      border-top: 1px solid #e5e9f1; }
+    .question-label { display: block; font-size: 14px; margin-bottom: 10px; }
+    textarea { width: 100%; min-height: 70px; max-height: 180px; padding: 12px 14px;
+      border: 1px solid #dbe2ed; border-radius: 12px; resize: vertical; line-height: 1.7; }
+    .question-actions { display: flex; justify-content: space-between;
+      align-items: center; gap: 12px; margin-top: 10px; }
+    .hint { color: #8791a3; font-size: 12px; }
+
+    @media (max-width: 720px) {
+      .sidebar {
+        position: static;
+        width: 100%;
+        padding: 20px;
+        border-right: none;
+        border-bottom: 1px solid #e5e9f1;
+      }
+
+      .brand-description {
+        margin-bottom: 20px;
+      }
+
+      .navigation {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+
+      .nav-button {
+        padding: 12px 6px;
+        text-align: center;
+        font-size: 13px;
+      }
+
+      .sidebar-footer {
+        display: none;
+      }
+
+      .main {
+        margin-left: 0;
+        padding: 24px 16px;
+      }
+
+      .card {
+        padding: 20px;
+      }
+
+      .card.chat-card { padding: 0; }
+      .chat-history { padding: 16px; }
+      .chat-composer { padding: 14px; }
+      .question-actions {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+
+
+    }
+  </style>
+</head>
+
+<body>
+  <!-- 左侧导航 -->
+  <aside class="sidebar">
+    <div class="brand">PDF 知识库</div>
+    <p class="brand-description">管理文档，查找答案</p>
+
+    <nav class="navigation" aria-label="主要导航">
+      <button
+        type="button"
+        class="nav-button active"
+        data-page="documents"
+        aria-controls="documents"
+        aria-current="page"
+      >
+        文档列表
+      </button>
+
+      <button
+        type="button"
+        class="nav-button"
+        data-page="upload"
+        aria-controls="upload"
+      >
+        上传文档
+      </button>
+
+      <button
+        type="button"
+        class="nav-button"
+        data-page="chat"
+        aria-controls="chat"
+      >
+        向知识库提问
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">个人文档助手</div>
+  </aside>
+
+  <!-- 右侧内容 -->
+  <main class="main">
+    <div class="content">
+
+      <!-- 文档列表页面 -->
+      <section id="documents" class="page">
+        <header class="page-header">
+          <h1>文档列表</h1>
+          <p>查看知识库中的 PDF 文档及其入库状态。</p>
+        </header>
+
+        <div class="card">
+          <div class="toolbar">
+            <h2 id="documentCount">全部文档</h2>
+            <button
+              id="refreshButton"
+              class="secondary-button"
+              type="button"
+            >
+              刷新列表
+            </button>
+          </div>
+
+          <div class="table-container">
+            <table aria-label="知识库文档">
+              <thead>
+                <tr>
+                  <th scope="col">文件名称</th>
+                  <th scope="col">文件大小</th>
+                  <th scope="col">入库状态</th>
+                  <th scope="col">操作</th>
+                </tr>
+              </thead>
+              <tbody id="documentRows"></tbody>
+            </table>
+          </div>
+
+          <p id="documentStatus" class="empty" role="status">
+            正在加载……
+          </p>
+        </div>
+      </section>
+
+      <!-- 上传文档页面 -->
+      <section id="upload" class="page" hidden>
+        <header class="page-header">
+          <h1>上传文档</h1>
+          <p>上传 PDF，完成入库后即可针对文档内容提问。</p>
+        </header>
+
+        <div class="card">
+          <div class="upload-area">
+            <h2>选择 PDF 文件</h2>
+            <p>支持 PDF 格式，单个文件不超过 20 MB。</p>
+
+            <input
+              id="pdfFile"
+              type="file"
+              accept=".pdf"
+              aria-label="选择要上传的 PDF"
+            >
+          </div>
+
+          <div class="upload-actions">
+            <button
+              id="uploadButton"
+              class="primary-button"
+              type="button"
+            >
+              上传并入库
+            </button>
+          </div>
+
+          <p id="uploadStatus" class="status" role="status"></p>
+        </div>
+      </section>
+
+      <!-- 提问页面 -->
+      <section id="chat" class="page" hidden>
+        <header class="page-header">
+          <h1>向知识库提问</h1>
+          <p>根据已入库的文档，检索相关内容并生成回答。</p>
+        </header>
+
+        <div class="card chat-card">
+          <div id="chatHistory" class="chat-history" role="log"
+               aria-label="聊天记录" aria-live="polite" aria-relevant="additions text">
+            <div id="chatEmpty" class="chat-empty">向知识库提问，问答记录会显示在这里。</div>
+          </div>
+          <form id="chatForm" class="chat-composer">
+            <label for="question" class="question-label">你想了解什么？</label>
+            <textarea id="question" placeholder="输入问题……"
+                      maxlength="4000" required></textarea>
+            <div class="question-actions">
+              <span class="hint">Enter 发送 · Shift + Enter 换行</span>
+              <button id="askButton" class="primary-button" type="submit">发送</button>
+            </div>
+            <p id="chatStatus" class="hint" role="status"></p>
+          </form>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script>
+    const navButtons = document.querySelectorAll(".nav-button");
+    const pages = document.querySelectorAll(".page");
+
+    const fileInput = document.getElementById("pdfFile");
+    const uploadButton = document.getElementById("uploadButton");
+    const uploadStatus = document.getElementById("uploadStatus");
+
+    const refreshButton = document.getElementById("refreshButton");
+    const documentRows = document.getElementById("documentRows");
+    const documentStatus = document.getElementById("documentStatus");
+    const documentCount = document.getElementById("documentCount");
+
+    const askButton = document.getElementById("askButton");
+    const questionInput = document.getElementById("question");
+    const chatHistory = document.getElementById("chatHistory");
+    const chatEmpty = document.getElementById("chatEmpty");
+    const chatStatus = document.getElementById("chatStatus");
+    let chatPending = false;
+
+    function scrollChat() {
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    function appendMessage(role, text, state = "") {
+      chatEmpty.hidden = true;
+      const message = document.createElement("div");
+      message.className = `message ${role} ${state}`;
+      const label = document.createElement("div");
+      label.className = "message-label";
+      label.textContent = role === "user" ? "你" : "知识库助手";
+      const body = document.createElement("div");
+      body.className = "message-body";
+      body.textContent = text;
+      message.append(label, body);
+      chatHistory.appendChild(message);
+      scrollChat();
+      return { message, body };
+    }
+
+    // 点击左侧导航，切换右侧页面
+    function switchPage(pageId) {
+      for (const page of pages) {
+        page.hidden = page.id !== pageId;
+      }
+
+      for (const button of navButtons) {
+        const isActive = button.dataset.page === pageId;
+
+        button.classList.toggle("active", isActive);
+
+        if (isActive) {
+          button.setAttribute("aria-current", "page");
+        } else {
+          button.removeAttribute("aria-current");
+        }
+      }
+
+      if (pageId === "chat") {
+        scrollChat();
+        questionInput.focus();
+      }
+
+      if (pageId === "documents") {
+        loadDocuments();
+      }
+    }
+
+    for (const button of navButtons) {
+      button.addEventListener("click", () => {
+        switchPage(button.dataset.page);
+      });
+    }
+
+    // 统一发送请求及处理错误
+    async function requestJSON(url, options = {}) {
+      const response = await fetch(url, options);
+      const data = await response.json();
+
+      if (!response.ok) {
+        const detail = data.detail;
+        const message = typeof detail === "string"
+          ? detail
+          : JSON.stringify(detail || "请求失败");
+
+        throw new Error(message);
+      }
+
+      return data;
+    }
+
+    let documentsLoading = false;
+
+    // 获取文档列表
+    async function loadDocuments() {
+      if (documentsLoading) return;
+
+      documentsLoading = true;
+      refreshButton.disabled = true;
+      documentRows.replaceChildren();
+      documentStatus.hidden = false;
+      documentStatus.textContent = "正在加载……";
+
+      try {
+        const documents = await requestJSON("/api/documents");
+
+        documentCount.textContent = `全部文档（${documents.length}）`;
+
+        if (documents.length === 0) {
+          documentStatus.textContent = "暂无文档，请点击左侧“上传文档”。";
+          return;
+        }
+
+        documentStatus.hidden = true;
+
+        for (const doc of documents) {
+          const row = document.createElement("tr");
+
+          const nameCell = document.createElement("td");
+          nameCell.textContent = doc.name;
+
+          const sizeCell = document.createElement("td");
+          sizeCell.textContent = `${doc.size_kb} KB`;
+
+          const statusCell = document.createElement("td");
+          const badge = document.createElement("span");
+
+          badge.className = "badge";
+          badge.textContent = doc.status;
+
+          if (doc.status === "已入库") {
+            badge.classList.add("success");
+          } else if (doc.status === "入库失败") {
+            badge.classList.add("failed");
+          }
+
+          statusCell.appendChild(badge);
+
+          const actionCell = document.createElement("td");
+          const deleteButton = document.createElement("button");
+
+          deleteButton.type = "button";
+          deleteButton.className = "delete-button";
+          deleteButton.textContent = "删除";
+
+          deleteButton.addEventListener("click", () => {
+            deletePDF(doc.id, doc.name, deleteButton);
+          });
+
+          actionCell.appendChild(deleteButton);
+
+          row.append(nameCell, sizeCell, statusCell, actionCell);
+          documentRows.appendChild(row);
+        }
+      } catch (error) {
+        documentCount.textContent = "全部文档";
+        documentStatus.textContent = `加载失败：${error.message}`;
+      } finally {
+        documentsLoading = false;
+        refreshButton.disabled = false;
+      }
+    }
+
+
+    async function deletePDF(id, name, button) {
+      const confirmed = window.confirm(
+        `确定删除“${name}”吗？\n将同时删除 PDF 文件及其知识库数据。`
+      );
+
+      if (!confirmed) return;
+
+      button.disabled = true;
+      button.textContent = "删除中……";
+
+      try {
+        await requestJSON(
+          `/api/documents/${encodeURIComponent(id)}`,
+          { method: "DELETE" }
+        );
+      } catch (error) {
+        window.alert(`删除失败：${error.message}`);
+      } finally {
+        button.disabled = false;
+        button.textContent = "删除";
+        await loadDocuments();
+      }
+    }
+
+    // 上传 PDF
+    async function uploadPDF() {
+      const file = fileInput.files[0];
+
+      if (!file) {
+        uploadStatus.textContent = "请先选择一个 PDF 文件。";
+        return;
+      }
+
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        uploadStatus.textContent = "请选择 PDF 格式的文件。";
+        return;
+      }
+
+      if (file.size > 20 * 1024 * 1024) {
+        uploadStatus.textContent = "文件不能超过 20 MB。";
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      uploadButton.disabled = true;
+      uploadStatus.textContent = "正在上传并入库，请稍候……";
+
+      try {
+        const result = await requestJSON("/api/upload", {
+          method: "POST",
+          body: formData
+        });
+
+        uploadStatus.textContent =
+          `${result.filename}：${result.message}。可以前往“向知识库提问”。`;
+
+        fileInput.value = "";
+      } catch (error) {
+        uploadStatus.textContent = `上传失败：${error.message}`;
+      } finally {
+        uploadButton.disabled = false;
+        await loadDocuments();
+      }
+    }
+
+    // 每轮追加消息，仅更新本轮的等待气泡，不覆盖历史。
+    async function askQuestion(event) {
+      event.preventDefault();
+      if (chatPending) return;
+      const question = questionInput.value.trim();
+      if (!question) {
+        chatStatus.textContent = "请输入问题。";
+        questionInput.focus();
+        return;
+      }
+
+      chatPending = true;
+      askButton.disabled = true;
+      askButton.textContent = "回答中……";
+      chatStatus.textContent = "";
+      appendMessage("user", question);
+      questionInput.value = "";
+      questionInput.focus();
+      const reply = appendMessage("assistant", "正在检索文档并生成回答……", "pending");
+
+      try {
+        const result = await requestJSON("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question })
+        });
+        reply.body.textContent = typeof result.answer === "string" && result.answer.trim()
+          ? result.answer : "没有收到回答。";
+        reply.message.classList.remove("pending");
+      } catch (error) {
+        reply.message.classList.remove("pending");
+        reply.message.classList.add("error");
+        reply.body.textContent = `请求失败：${error.message}。请重新发送问题。`;
+      } finally {
+        chatPending = false;
+        askButton.disabled = false;
+        askButton.textContent = "发送";
+        scrollChat();
+        // 不在此清空输入框，避免删除用户等待期间输入的下一条问题。
+      }
+    }
+
+    questionInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing
+          && event.keyCode !== 229) {
+        event.preventDefault();
+        if (!chatPending) document.getElementById("chatForm").requestSubmit();
+      }
+    });
+
+    refreshButton.addEventListener("click", loadDocuments);
+    uploadButton.addEventListener("click", uploadPDF);
+    document.getElementById("chatForm")
+      .addEventListener("submit", askQuestion);
+
+    loadDocuments();
+  </script>
+</body>
+</html>

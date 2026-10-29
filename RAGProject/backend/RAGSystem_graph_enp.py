@@ -11,12 +11,12 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph
 
-from create_judge_eval import relevance2
-from graph_state import RetrievalState
+
+from backend.graph_state import RetrievalState
 from utils import retrieval_docs, content_hash, get_reranker, format_sources, load_vectorstore
-from vector_bm25_store import _get_or_build_bm25
+from backend.vector_bm25_store import _get_or_build_bm25
 from config import embed_model_ch, dir_chroma, embed_collection_name, bm25_key, RELEVANCE_THRESHOLD, key, url, \
-    embed_search_key
+    embed_search_key, vector_weight, bm25_weight, k
 
 
 def get_deepseek_llm():
@@ -93,70 +93,28 @@ def bm25_search(
     queries: list[str],
     documents: list[Document],
     k: int = bm25_key,
-) -> list[Document]:
-    """
-    BM25 关键词检索：基于词频的精确匹配检索
-
-    BM25 不需要 Embedding，适合精确关键词匹配场景。
-    需要传入完整文档集合来构建 BM25 索引。
-
-    优化：相同文档列表的 BM25 索引会被缓存（基于 id() + len() 双重校验），
-    重复调用不会反复重建倒排索引。
-
-    参数:
-        queries: 查询列表
-        documents: 用于构建 BM25 索引的文档集合
-        k: 每个查询召回的文档数
-
-    返回:
-        去重后的文档列表
-    """
+) -> list[list[Document]]:
     if not documents:
         return []
 
     bm25 = _get_or_build_bm25(documents, k=k)
 
-    seen_hashes = set()
-    results = []
+    return [
+        bm25.invoke(query)
+        for query in queries
+    ]
 
-    for q in queries:
-        docs = bm25.invoke(q)
-        for doc in docs:
-            h = hash(doc.page_content)
-            if h not in seen_hashes:
-                seen_hashes.add(h)
-                results.append(doc)
-
-    return results
 
 def vector_search(
     queries: list[str],
     vectorstore: Chroma,
     k: int = embed_search_key,
-) -> list[Document]:
-    """
-    向量语义检索：对每个查询变体执行 similarity_search，合并结果
+) -> list[list[Document]]:
+    return [
+        vectorstore.similarity_search(query, k=k)
+        for query in queries
+    ]
 
-    参数:
-        queries: 查询列表（原始 + 改写变体）
-        vectorstore: ChromaDB 向量库实例
-        k: 每个查询召回的文档数
-
-    返回:
-        去重后的文档列表
-    """
-    seen_hashes = set()
-    results = []
-
-    for q in queries:
-        docs = vectorstore.similarity_search(q, k=k)
-        for doc in docs:
-            h = hash(doc.page_content)
-            if h not in seen_hashes:
-                seen_hashes.add(h)
-                results.append(doc)
-
-    return results
 
 def parse_pdf(file_path: str):
     loader = PyPDFLoader(file_path=file_path)
@@ -217,14 +175,88 @@ def rewrite_query(query: str, llm=None) -> list[str]:
 
     # 始终包含原始查询
     all_queries = [query] + variants[:2]
+
     return all_queries
 
 def _rewrite_node(state: RetrievalState) -> dict:
     queries = rewrite_query(state["original_query"])
     return {
-        "rewritten_queries":queries
+        "rewritten_queries":[state["original_query"]]
     }
 
+def _document_key(doc: Document):
+    # 两路必须使用一致的片段ID
+    if doc.id:
+        return ("id", doc.id)
+
+    return (
+        "content",
+        doc.metadata.get("source"),
+        doc.metadata.get("page"),
+        content_hash(doc.page_content),
+    )
+
+
+def _rrf_node(state: RetrievalState) -> dict:
+    vector_rankings = state.get("vector_results", [])
+    bm25_rankings = state.get("bm25_results", [])
+
+    rrf_c = 60  # RRF平滑常数，不是召回条数
+
+    scores = {}
+    documents = {}
+
+    for rankings, channel_weight in [
+        (vector_rankings, vector_weight),
+        (bm25_rankings, bm25_weight),
+    ]:
+        if not rankings:
+            continue
+
+        # 均分该检索渠道的权重，避免查询数量越多，
+        # 该渠道的总权重就越大。
+        list_weight = channel_weight / len(rankings)
+
+        for ranked_docs in rankings:
+            seen = set()
+            rank = 0
+
+            for doc in ranked_docs:
+                doc_key = _document_key(doc)
+
+                # 同一个排名列表内，重复片段只算一次
+                if doc_key in seen:
+                    continue
+
+                seen.add(doc_key)
+                rank += 1
+
+                documents.setdefault(doc_key, doc)
+
+                scores[doc_key] = (
+                    scores.get(doc_key, 0.0)
+                    + list_weight / (rrf_c + rank)
+                )
+
+    sorted_keys = sorted(
+        scores,
+        key=lambda doc_key: scores[doc_key],
+        reverse=True,
+    )
+
+    merged_results = [
+        documents[doc_key].model_copy(
+            update={
+                "metadata": {
+                    **documents[doc_key].metadata,
+                    "rrf_score": scores[doc_key],
+                }
+            }
+        )
+        for doc_key in sorted_keys
+    ]
+
+    return {"merged_results": merged_results}
 
 def _merge_node(state: RetrievalState) -> dict:
     vector_results = state.get("vector_results",[])
@@ -253,8 +285,8 @@ def _rerank_node(state: RetrievalState) -> dict:
     doc = state.get("merged_results",[])
 
     reranker_model = get_reranker()
-    print(f"queries:{queries}")
-    print(f"doc:{doc}")
+    #print(f"queries:{queries}")
+    #print(f"doc:{doc}")
     reranked = reranker_model.compress_documents(
         documents=doc,
         query=queries,
@@ -308,31 +340,31 @@ def _route_by_score(state: RetrievalState) -> dict:
         return "fallback"
     return END
 
-# def _generate_node(state: RetrievalState) -> dict:
-#     ori_queries = state.get("original_query",[])
-#     reranked_res = state.get("reranked_results",[])
-#     print(reranked_res)
-#     llm = get_deepseek_llm()
-#     context = "\n\n---\n\n".join(
-#         f"[来源 {i + 1}: {doc.metadata.get('source', 'unknown')}, "
-#         f"第 {doc.metadata.get('page', '?')} 页]\n{doc.page_content}"
-#         for i, doc in enumerate(reranked_res)
-#     )
-#     prompt = f"""请根据以下检索到的文档内容回答用户问题。
-#     要求：
-#     1. 只基于提供的文档内容回答，不要编造信息
-#     2. 如果文档中没有相关信息，明确说明
-#     3. 在回答中标注信息来源（如"根据文档1..."）
-#
-#     检索到的文档：
-#     {context}
-#
-#     用户问题：{ori_queries}"""
-#
-#     response = llm.invoke(prompt)
-#     sources = format_sources(reranked_res)
-#
-#     return {"answer":response.content, "sources":sources}
+def _generate_node(state: RetrievalState) -> dict:
+    ori_queries = state.get("original_query",[])
+    reranked_res = state.get("reranked_results",[])
+    print(reranked_res)
+    llm = get_deepseek_llm()
+    context = "\n\n---\n\n".join(
+        f"[来源 {i + 1}: {doc.metadata.get('source', 'unknown')}, "
+        f"第 {doc.metadata.get('page', '?')} 页]\n{doc.page_content}"
+        for i, doc in enumerate(reranked_res)
+    )
+    prompt = f"""请根据以下检索到的文档内容回答用户问题。
+    要求：
+    1. 只基于提供的文档内容回答，不要编造信息
+    2. 如果文档中没有相关信息，明确说明
+    3. 在回答中标注信息来源（如"根据文档1..."）
+
+    检索到的文档：
+    {context}
+
+    用户问题：{ori_queries}"""
+
+    response = llm.invoke(prompt)
+    sources = format_sources(reranked_res)
+
+    return {"answer":response.content, "sources":sources}
 
 def _fallback_node(state: RetrievalState) -> dict:
     """
@@ -422,22 +454,27 @@ def build_retrieval_graph(vectorstore: Chroma,
     builder.add_node("rewrite", _rewrite_node)
     builder.add_node("vector_search", _vector_node)
     builder.add_node("bm25_search", _bm25_node)
+    builder.add_node("rrf",_rrf_node)
     builder.add_node("merge",_merge_node)
     builder.add_node("rerank",_rerank_node)
     builder.add_node("llm_grade",_llm_grage_node)
-    #builder.add_node("generate",_generate_node)
+    # builder.add_node("generate",_generate_node)
     builder.add_node("fallback",_fallback_node)
 
     builder.add_edge(START,"rewrite")
     builder.add_edge("rewrite","vector_search")
     builder.add_edge("rewrite","bm25_search")
 
-    builder.add_edge("vector_search","merge")
-    builder.add_edge("bm25_search","merge")
-    builder.add_edge("merge","rerank")
+    # builder.add_edge("vector_search","rrf")
+    # builder.add_edge("bm25_search","rrf")
+    builder.add_edge(
+        ["vector_search", "bm25_search"],
+        "rrf",
+    )
+    builder.add_edge("rrf","rerank")
     builder.add_edge("rerank","llm_grade")
     builder.add_conditional_edges("llm_grade",_route_by_score)
-    #builder.add_edge("generate",END)
+    # builder.add_edge("generate",END)
     builder.add_edge("fallback",END)
 
     return builder.compile()
@@ -466,37 +503,7 @@ def main():
     #pages = parse_pdf(pdf_path)
     #chunks = chunk_documents(pages,100,10)
 
-    embed_store = load_vectorstore()
-    chunks = load_bm25_documents(embed_store)
-    builder = build_retrieval_graph(embed_store,chunks)
 
-    def target(inputs: dict) -> dict:
-        question = inputs["question"]
-        result = answerRAG(
-            builder=builder,
-            question=inputs["question"],
-        )
-
-        return {'answer':answerRAG(
-            builder=builder,
-            question=question)['answer'],
-            'contexts':[doc.page_content for doc in result["reranked_results"]],
-        }
-
-    from langsmith import Client
-
-    from create_judge_eval import relevance
-
-
-    client = Client()
-
-    results = client.evaluate(
-        target,  # 调用你的 Agent
-        data="rag_datasets",  # 改成你网站上的数据集名称
-        evaluators=[relevance2],  # Judge 评分函数
-        experiment_prefix="rag-baseline",  # 本次实验名称前缀
-        max_concurrency=1,
-    )
     """
     | 参数                    | 要传的类型               | 示例            |
 |

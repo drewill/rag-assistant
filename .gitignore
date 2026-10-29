@@ -28,4 +28,5 @@ RAGProject/test.pdf
 *.sqlite3
 *.sqlite3-*
 RAGProject/chroma_store/
-RAGProject/data/
+
+test.py
